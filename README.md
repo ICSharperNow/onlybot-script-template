@@ -8,7 +8,10 @@ Open it, press one button, and your script shows up in the OnlyBot client.
 1. **OnlyBot** installed, and the launcher started at least once.
 2. **IntelliJ IDEA** (free): https://www.jetbrains.com/idea/download
 
-Nothing else. No manual Java setup, no config files to edit.
+3. **Premium scripter access** on your OnlyBot account. OnlyBot refuses to start local scripts without it
+   (error 403, `Local scripts are restricted to premium scripters`). Ask OnlyBot staff.
+
+Nothing else to install. No manual Java setup, no config files to edit.
 
 ## Get started
 
@@ -67,7 +70,7 @@ Prefer a terminal? `gradlew installScript` does the same thing.
 | "Could not find the OnlyBot client" | Start the OnlyBot launcher once so it downloads the client. If OnlyBot is installed somewhere unusual, set `onlybotDir` in `gradle.properties`. |
 | Red underlines everywhere | Click the Gradle elephant icon (right edge), then the reload button. |
 | Script is not in the list | Does the class have `@ScriptManifest(...)` above it? Close and reopen the script list. |
-| No Local scripts appear at all | Your OnlyBot account may need local-script access. Ask OnlyBot support. |
+| Script is listed but will not start, log says `Local scripts are restricted to premium scripters` | OnlyBot only runs local scripts for accounts with premium scripter access. Ask OnlyBot staff for it. |
 | Build broke after an OnlyBot update | Run again. The error points at the line that needs changing. |
 
 ## Good to know
