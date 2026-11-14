@@ -1,0 +1,110 @@
+plugins {
+    id 'java'
+}
+
+// ---------------------------------------------------------------------------
+//  OnlyBot script template
+//
+//  You should not need to change anything in this file.
+//  Write your scripts in  src/main/java/myscripts
+//  Then run the "Build and Install" configuration (green arrow, top right).
+// ---------------------------------------------------------------------------
+
+// Where OnlyBot is installed. Found automatically; override in gradle.properties.
+def findOnlybotDir = {
+    def custom = providers.gradleProperty('onlybotDir').orNull
+    if (custom) return file(custom)
+    def os = System.getProperty('os.name').toLowerCase()
+    def home = System.getProperty('user.home')
+    if (os.contains('win')) return new File(System.getenv('APPDATA') ?: "${home}/AppData/Roaming", '.onlybot')
+    if (os.contains('mac')) return new File(home, 'Library/Application Support/onlybot')
+    return new File(home, '.onlybot')
+}
+def onlybotDir = findOnlybotDir()
+def clientDir = new File(onlybotDir, 'install/client')
+def localScriptsDir = new File(onlybotDir, 'local-scripts')
+
+dependencies {
+    // The scripting API is inside the OnlyBot client itself, so we compile against it.
+    compileOnly fileTree(dir: clientDir, include: '*.jar')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21          // the OnlyBot client runs on Java 21
+    options.encoding = 'UTF-8'
+}
+
+def checkOnlybot = tasks.register('checkOnlybot') {
+    def dir = clientDir
+    doLast {
+        def jars = dir.listFiles({ f -> f.name.endsWith('.jar') } as FileFilter)
+        if (!jars) {
+            throw new GradleException(
+                "Could not find the OnlyBot client in:\n  ${dir}\n" +
+                "Install OnlyBot and start the launcher once so it downloads the client.\n" +
+                "If OnlyBot is installed somewhere else, set onlybotDir in gradle.properties.")
+        }
+    }
+}
+tasks.named('compileJava') { dependsOn checkOnlybot }
+
+// Builds the script list (echo-scripts.json) that the client reads.
+// It is made from the @ScriptManifest on each script class, so you never edit it by hand.
+def generateScriptList = tasks.register('generateScriptList') {
+    def sources = fileTree('src/main/java') { include '**/*.java' }
+    def outDir = layout.buildDirectory.dir('generated/onlybot')
+    inputs.files(sources)
+    outputs.dir(outDir)
+    doLast {
+        def scripts = []
+        sources.files.sort().each { f ->
+            def text = f.getText('UTF-8')
+            def manifest = text =~ /(?s)@ScriptManifest\s*\((.*?)\)\s*(?:public\s+)?(?:final\s+)?class\s+(\w+)/
+            if (!manifest.find()) return
+            def body = manifest.group(1)
+            def className = manifest.group(2)
+            def pkg = (text =~ /(?m)^\s*package\s+([\w.]+)\s*;/)
+            def fullName = (pkg.find() ? pkg.group(1) + '.' : '') + className
+            def value = { String key ->
+                def m = body =~ ('\\b' + key + '\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)"')
+                m.find() ? m.group(1) : ''
+            }
+            scripts << [
+                className  : fullName,
+                name       : value('name') ?: className,
+                version    : value('version') ?: '1.0',
+                author     : value('author'),
+                description: value('description'),
+                category   : value('category') ?: 'Other'
+            ]
+        }
+        if (scripts.isEmpty()) {
+            throw new GradleException('No script found. A script class needs @ScriptManifest(...) above it.')
+        }
+        def json = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
+            [api: 'onlybot-scripting', apiVersion: 1, scripts: scripts]))
+        def out = outDir.get().asFile
+        out.mkdirs()
+        new File(out, 'echo-scripts.json').setText(json, 'UTF-8')
+        println "Scripts in this build: " + scripts.collect { it.name }.join(', ')
+    }
+}
+
+tasks.named('jar') {
+    archiveFileName = "${rootProject.name}.jar"
+    from(generateScriptList)
+}
+
+// Build the jar and copy it into OnlyBot's local-scripts folder.
+tasks.register('installScript', Copy) {
+    group = 'onlybot'
+    description = 'Builds your scripts and installs them into OnlyBot.'
+    def target = providers.gradleProperty('installDir').map { file(it) }.orElse(localScriptsDir)
+    from(tasks.named('jar'))
+    into(target)
+    doLast {
+        println ''
+        println "DONE. Installed ${rootProject.name}.jar into ${target.get()}"
+        println 'Open the script list in the OnlyBot client and look for the "Local" tag.'
+    }
+}

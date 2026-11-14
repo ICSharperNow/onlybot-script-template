@@ -1,0 +1,2 @@
+// The project name is also the name of the .jar file that gets built.
+rootProject.name = 'my-onlybot-scripts'
